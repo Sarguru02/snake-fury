@@ -1,12 +1,12 @@
 {-# Language RecordWildCards #-}
 module GameState where
 
-import RenderState (BoardInfo (..), Point, DeltaBoard)
+import           RenderState (BoardInfo (..), Point, {- DeltaBoard -})
 import qualified RenderState as Board
-import Data.Sequence (Seq(..))
+import           Data.Sequence (Seq(..))
 import qualified Data.Sequence as S
-import System.Random (uniformR, RandomGen(split), StdGen, Random (randomR))
-import Data.Maybe (isJust)
+import           System.Random ({- uniformR, RandomGen(split), -} StdGen, Random (randomR))
+-- import           Data.Maybe (isJust)
 
 data Movement =
     North
@@ -45,11 +45,11 @@ inSnake :: Point -> SnakeSeq  -> Bool
 inSnake p SnakeSeq{snakeHead=sh, snakeBody=sb} = p == sh || p `elem` sb
 
 nextHead :: BoardInfo -> GameState -> Point
-nextHead BoardInfo{height=h, width=w} GameState{movement=direction, snakeSeq=snake, ..} =
+nextHead BoardInfo{height=h, width=w} GameState{movement=direction, snakeSeq=snake} =
   -- I probably shouldn't wrap. I should make the game over instead ?
   -- But for now let it be. The snake comes through the other side.
-  let wrap1 n x = ((x-1) `mod` n) + 1 -- wraps from [1..n]
-      wrap (x,y) = (wrap1 h x, wrap1 w y)
+  let wrap1 n val = ((val-1) `mod` n) + 1 -- wraps from [1..n]
+      wrap (x',y') = (wrap1 h x', wrap1 w y')
       (x,y) = snakeHead snake
   in wrap $ case direction of
     North -> (x-1, y)
@@ -81,22 +81,39 @@ newApple (BoardInfo h w) (GameState snake apple _ gen) =
 -- 
 
 move :: BoardInfo -> GameState -> (Board.RenderMessage , GameState)
-move = undefined
-
-{- This is a test for move. It should return
-
-RenderBoard [((1,4),SnakeHead),((1,1),Snake),((1,3),Empty)]
-RenderBoard [((2,1),SnakeHead),((1,1),Snake),((3,1),Apple)] ** your Apple might be different from mine
-RenderBoard [((4,1),SnakeHead),((1,1),Snake),((1,3),Empty)]
-
--}
-
--- >>> snake_seq = SnakeSeq (1,1) (Data.Sequence.fromList [(1,2), (1,3)])
--- >>> apple_pos = (2,1) 
--- >>> board_info = BoardInfo 4 4
--- >>> game_state1 = GameState snake_seq apple_pos West (System.Random.mkStdGen 1)
--- >>> game_state2 = GameState snake_seq apple_pos South (System.Random.mkStdGen 1)
--- >>> game_state3 = GameState snake_seq apple_pos North (System.Random.mkStdGen 1)
--- >>> fst $ move board_info game_state1
--- >>> fst $ move board_info game_state2
--- >>> fst $ move board_info game_state3
+move board@(BoardInfo _row _col) state@(GameState (SnakeSeq sh sb) apple _ _) =
+  let newHead = nextHead board state
+      gameOver = newHead `elem` sb
+      eatingApple = newHead == apple
+  in
+    case (gameOver, eatingApple) of
+    (True, _) -> (Board.GameOver, state)
+    (_, True) -> case sb of
+      S.Empty ->
+        let newSnake = SnakeSeq (newHead) (S.singleton sh)
+            (apple', newGen) = newApple board state
+            changes = Board.RenderBoard [(newHead, Board.SnakeHead), (sh,Board.Snake),(apple', Board.Apple)]
+            newState = state{snakeSeq = newSnake, randomGen = newGen, applePosition = apple'}
+        in (changes, newState)
+      xs ->
+        let newSnake = SnakeSeq (newHead) (sh :<| xs)
+            (apple', newGen) = newApple board state
+            changes = Board.RenderBoard [(newHead, Board.SnakeHead), (sh,Board.Snake),(apple', Board.Apple)]
+            newState = state{snakeSeq = newSnake, randomGen = newGen, applePosition = apple'}
+        in (changes, newState)
+    (_,_) -> case sb of
+      S.Empty ->
+        let newSnake = SnakeSeq newHead S.empty
+            changes = Board.RenderBoard [(sh, Board.Empty), (newHead, Board.SnakeHead)]
+            newState = state{snakeSeq = newSnake}
+        in (changes, newState)
+      x :<| S.Empty ->
+        let newSnake = SnakeSeq newHead (S.singleton sh)
+            changes = Board.RenderBoard [(x, Board.Empty), (sh, Board.Snake), (newHead, Board.SnakeHead)]
+            newState = state{snakeSeq = newSnake}
+        in (changes, newState)
+      firstElement :<| (seq  :|> lastElement)   ->
+        let newSnake = SnakeSeq newHead (sh :<| firstElement :<| seq)
+            changes = Board.RenderBoard [(lastElement, Board.Empty), (sh, Board.Snake), (newHead, Board.SnakeHead)]
+            newState = state{snakeSeq = newSnake}
+        in (changes, newState)
