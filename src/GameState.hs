@@ -80,40 +80,40 @@ newApple (BoardInfo h w) (GameState snake apple _ gen) =
 -- We need to send the following delta: [((2,2), Apple), ((4,3), Snake), ((4,4), SnakeHead)]
 -- 
 
-move :: BoardInfo -> GameState -> (Board.RenderMessage , GameState)
+move :: BoardInfo -> GameState -> ([ Board.RenderMessage ] , GameState)
 move board@(BoardInfo _row _col) state@(GameState (SnakeSeq sh sb) apple _ _) =
   let newHead = nextHead board state
       gameOver = newHead `elem` sb
       eatingApple = newHead == apple
   in
     case (gameOver, eatingApple) of
-    (True, _) -> (Board.GameOver, state)
+    (True, _) -> ([ Board.GameOver ], state)
     (_, True) -> case sb of
       S.Empty ->
         let newSnake = SnakeSeq (newHead) (S.singleton sh)
             (apple', newGen) = newApple board state
             changes = Board.RenderBoard [(newHead, Board.SnakeHead), (sh,Board.Snake),(apple', Board.Apple)]
             newState = state{snakeSeq = newSnake, randomGen = newGen, applePosition = apple'}
-        in (changes, newState)
+        in ([ changes, Board.UpdateScore 1 ], newState)
       xs ->
         let newSnake = SnakeSeq (newHead) (sh :<| xs)
             (apple', newGen) = newApple board state
             changes = Board.RenderBoard [(newHead, Board.SnakeHead), (sh,Board.Snake),(apple', Board.Apple)]
             newState = state{snakeSeq = newSnake, randomGen = newGen, applePosition = apple'}
-        in (changes, newState)
+        in ([ changes, Board.UpdateScore 1 ], newState)
     (_,_) -> case sb of
       S.Empty ->
         let newSnake = SnakeSeq newHead S.empty
             changes = Board.RenderBoard [(sh, Board.Empty), (newHead, Board.SnakeHead)]
             newState = state{snakeSeq = newSnake}
-        in (changes, newState)
+        in ([ changes ], newState)
       x :<| S.Empty ->
         let newSnake = SnakeSeq newHead (S.singleton sh)
             changes = Board.RenderBoard [(x, Board.Empty), (sh, Board.Snake), (newHead, Board.SnakeHead)]
             newState = state{snakeSeq = newSnake}
-        in (changes, newState)
+        in ([ changes ], newState)
       firstElement :<| (seq  :|> lastElement)   ->
         let newSnake = SnakeSeq newHead (sh :<| firstElement :<| seq)
             changes = Board.RenderBoard [(lastElement, Board.Empty), (sh, Board.Snake), (newHead, Board.SnakeHead)]
             newState = state{snakeSeq = newSnake}
-        in (changes, newState)
+        in ([ changes ], newState)
